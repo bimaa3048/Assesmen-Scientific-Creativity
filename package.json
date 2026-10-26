@@ -1,0 +1,24 @@
+{
+  "name": "scientific-creativity-assessment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplikasi asesmen Scientific Creativity berbasis PhET Circuit Construction Kit: DC",
+  "main": "server.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:local": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "next": "^16.4.2",
+    "pg": "^8.16.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}
