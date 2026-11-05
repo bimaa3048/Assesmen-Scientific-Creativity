@@ -595,13 +595,14 @@ function teacherStudentsView() {
   const data = app.teacherData;
   const classes = [...new Set(data.students.map((student) => student.class_name).filter(Boolean))].sort();
   const attemptsByStudent = new Map(data.attempts.map((attempt) => [attempt.student.id, attempt]));
+  const submittedCount = data.attempts.filter((attempt) => attempt.status === 'submitted').length;
   const rows = data.students.map((student) => attemptRow(attemptsByStudent.get(student.id), student, data.attempts)).join('');
   return `${pageHeading('Ruang guru', 'Daftar siswa', 'Cari siswa, pantau asesmen, buka jawaban untuk dinilai, atau kelola akun siswa.') }
     <section class="card section-card">
       <div class="section-title"><div><h2>Daftar siswa & asesmen</h2><p>Jawaban diambil langsung dari database website saat dibuka.</p></div><span class="badge ${data.spreadsheetConfigured ? 'green' : 'gray'}">Google Sheets ${data.spreadsheetConfigured ? 'terhubung' : 'belum dikonfigurasi'}</span></div>
-      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button></div>
+      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button><button class="button small" data-action="sync-all-attempts" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim ${submittedCount} jawaban ke Google Sheets</button></div>
       <div class="table-wrap"><table><thead><tr><th>Siswa</th><th>Kelas</th><th>Absen</th><th>Status</th><th>Waktu mulai</th><th>Waktu kumpul</th><th>Hasil penilaian & persentase</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="table-empty">Belum ada siswa terdaftar.</td></tr>'}</tbody></table></div>
-      <p class="sync-note">${data.spreadsheetConfigured ? 'Jawaban dan hasil penilaian disinkronkan ke spreadsheet. Jika terjadi kegagalan, gunakan aksi sinkronisasi ulang pada halaman jawaban.' : 'Google Sheets opsional. Untuk mengaktifkan, atur GOOGLE_APPS_SCRIPT_URL dan GOOGLE_APPS_SCRIPT_TOKEN di environment server; PostgreSQL tetap menjadi sumber data utama.'}</p>
+      <p class="sync-note">${data.spreadsheetConfigured ? 'Pengiriman ke spreadsheet dilakukan saat guru menekan tombol di atas. Semua percobaan yang sudah dikumpulkan akan dikirim; siswa yang belum mengumpulkan tidak disertakan. Siswa dan jawaban tetap tersimpan di database website.' : 'Google Sheets opsional. Untuk mengaktifkan, atur GOOGLE_APPS_SCRIPT_URL dan GOOGLE_APPS_SCRIPT_TOKEN di environment server; PostgreSQL tetap menjadi sumber data utama.'}</p>
     </section>`;
 }
 
@@ -1011,13 +1012,51 @@ async function submitGrade(button) {
     }
     render();
     toast(result.published ? 'Penilaian dipublikasikan. Nilai kini tersedia untuk siswa.' : 'Draf penilaian tersimpan.');
-    if (result.sync.status === 'failed') toast('Penilaian tersimpan, tetapi sinkronisasi spreadsheet gagal. Coba sinkronkan ulang.', 'error');
   } catch (error) {
     const currentForm = document.getElementById('grade-form');
     setFormError(currentForm || form, error.message);
     allGradeButtons.forEach((item) => { item.disabled = false; });
     button.disabled = false;
     button.textContent = button.dataset.publish === 'true' ? 'Simpan & selesaikan penilaian' : 'Simpan draf penilaian';
+  }
+}
+
+async function syncAllSubmittedAttempts(button) {
+  const attempts = app.teacherData.attempts.filter((attempt) => attempt.status === 'submitted');
+  if (!attempts.length) {
+    toast('Belum ada jawaban yang dikumpulkan untuk dikirim.');
+    return;
+  }
+  if (!app.teacherData.spreadsheetConfigured) {
+    toast('Google Sheets belum dikonfigurasi di server.', 'error');
+    return;
+  }
+  if (!window.confirm(`Kirim atau perbarui data ${attempts.length} percobaan yang sudah dikumpulkan ke Google Sheets?`)) return;
+
+  button.disabled = true;
+  let succeeded = 0;
+  let failed = 0;
+  for (const [index, attempt] of attempts.entries()) {
+    button.textContent = `Mengirim ${index + 1}/${attempts.length}…`;
+    try {
+      const result = await api(`/api/teacher/attempts/${encodeURIComponent(attempt.id)}/sync`, {
+        method: 'POST',
+        body: '{}',
+      });
+      if (result.sync.status === 'success') succeeded += 1;
+      else failed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  try {
+    await refreshTeacherDashboard();
+    render();
+    toast(`${succeeded} percobaan berhasil dikirim${failed ? `; ${failed} gagal. Periksa log sinkronisasi atau coba ulang.` : '.'}`, failed ? 'error' : '');
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = `Kirim ${attempts.length} jawaban ke Google Sheets`;
+    toast(`Pengiriman selesai (${succeeded} berhasil, ${failed} gagal), tetapi daftar siswa gagal dimuat ulang: ${error.message}`, 'error');
   }
 }
 
@@ -1184,6 +1223,7 @@ root.addEventListener('click', async (event) => {
     }
     if (action === 'open-attempt') return await openTeacherAttempt(button.dataset.attempt);
     if (action === 'save-grade') return await submitGrade(button);
+    if (action === 'sync-all-attempts') return await syncAllSubmittedAttempts(button);
     if (action === 'reset-password') return await resetStudentPassword(button);
     if (action === 'delete-student') return await deleteStudent(button);
     if (action === 'reset-attempt') return await resetStudentAttempt(button);

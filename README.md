@@ -108,9 +108,9 @@ Jangan masukkan password, token, atau connection string ke repository. Gunakan H
    - `SYNC_TOKEN`: secret acak panjang yang sama dengan `GOOGLE_APPS_SCRIPT_TOKEN` di server.
 4. **Deploy → New deployment → Web app**. Jalankan sebagai akun pemilik spreadsheet, lalu atur akses Web App sesuai kebijakan sekolah. Endpoint perlu dapat dipanggil server aplikasi.
 5. Atur `GOOGLE_APPS_SCRIPT_URL` dengan URL deployment dan `GOOGLE_APPS_SCRIPT_TOKEN` dengan token yang sama pada environment server, lalu restart.
-6. Saat siswa mengumpulkan dan guru mempublikasikan nilai, backend mengirim data ke Apps Script. Baris diperbarui berdasarkan ID percobaan sehingga tidak membuat duplikat. Kegagalan dicatat pada `sync_logs`; guru dapat memilih **Sinkronkan ulang spreadsheet** dari halaman jawaban.
+6. Pengiriman jawaban tidak berjalan otomatis. Dari **Ruang guru → Daftar siswa**, guru dapat memilih **Kirim … jawaban ke Google Sheets** untuk mengirim seluruh percobaan yang sudah dikumpulkan. Data diproses satu per satu; baris diperbarui berdasarkan ID percobaan sehingga pengiriman ulang tidak membuat duplikat. Kegagalan dicatat pada `sync_logs`; guru juga dapat memilih **Sinkronkan ulang spreadsheet** dari halaman jawaban.
 
-Data yang dikirim berisi identitas siswa, ID percobaan, status/waktu, jawaban, skor indikator, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Spreadsheet merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL.
+Data yang dikirim berisi identitas siswa yang memiliki percobaan, ID percobaan, status/waktu, jawaban, skor indikator yang telah dipublikasikan, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Akun siswa yang belum memulai asesmen tidak ikut dikirim. Spreadsheet merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL.
 
 Spreadsheet belum terhubung ke akun tertentu sampai pemilik membuat Spreadsheet, menetapkan `SPREADSHEET_ID` dan `SYNC_TOKEN` di Script Properties, lalu memasukkan URL deployment dan token yang sama pada environment server. Jangan mengirim token melalui chat atau menyimpan nilainya di repository. Setelah deployment, uji dengan satu percobaan siswa dan pastikan baris **Hasil Asesmen** muncul sebelum digunakan untuk seluruh kelas.
 

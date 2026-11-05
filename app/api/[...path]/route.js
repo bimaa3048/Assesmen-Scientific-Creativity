@@ -238,7 +238,6 @@ async function expireAttempt(attempt) {
        WHERE id = $2 AND status = 'in_progress'`,
       [submittedAt, attempt.id],
     );
-    synchronizeAttempt(attempt.id).catch((error) => console.error('Automatic spreadsheet sync failed:', error));
     const updated = await pool.query('SELECT * FROM attempts WHERE id = $1', [attempt.id]);
     return updated.rows[0];
   }
@@ -594,7 +593,11 @@ async function handle(request) {
       );
     }
     const updated = await pool.query('SELECT * FROM attempts WHERE id = $1', [attempt.id]);
-    return json({ submitted: true, attempt: attemptPayload(updated.rows[0]), sync: await synchronizeAttempt(attempt.id) });
+    return json({
+      submitted: true,
+      attempt: attemptPayload(updated.rows[0]),
+      sync: { configured: Boolean(process.env.GOOGLE_APPS_SCRIPT_URL), status: 'not_requested' },
+    });
   }
 
   const upload = pathname.match(/^\/api\/attempts\/([^/]+)\/attachments$/);
@@ -832,9 +835,7 @@ async function handle(request) {
         );
       }
     });
-    const sync = publish
-      ? await synchronizeAttempt(attempt.id)
-      : { configured: Boolean(process.env.GOOGLE_APPS_SCRIPT_URL), status: 'not_requested' };
+    const sync = { configured: Boolean(process.env.GOOGLE_APPS_SCRIPT_URL), status: 'not_requested' };
     return json({ saved: true, published: publish, grade: { ...summary, status: publish ? 'published' : 'draft', gradedAt }, sync });
   }
 
