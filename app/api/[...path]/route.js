@@ -341,6 +341,73 @@ async function synchronizeAttempt(attemptId) {
   }
 }
 
+async function synchronizeStudentRoster() {
+  const endpoint = process.env.GOOGLE_APPS_SCRIPT_URL;
+  if (!endpoint) return { configured: false, status: 'not_configured' };
+
+  try {
+    const result = await pool.query(
+      `SELECT attempts.id AS attempt_id, users.id AS student_id, users.full_name, users.username,
+              users.class_name, users.attendance_number, attempts.status, attempts.submitted_at,
+              grades.status AS grade_status, grades.fluency_score, grades.flexibility_score,
+              grades.originality_score, grades.elaboration_score, grades.total_score,
+              grades.final_score, grades.category, grades.graded_at
+       FROM attempts
+       JOIN users ON users.id = attempts.student_id
+       LEFT JOIN grades ON grades.attempt_id = attempts.id
+       WHERE attempts.status = 'submitted'
+       ORDER BY users.full_name`,
+    );
+    const students = result.rows.map((row) => {
+      const published = row.grade_status === 'published';
+      return {
+        studentId: row.student_id,
+        attemptId: row.attempt_id,
+        fullName: row.full_name,
+        username: row.username,
+        className: row.class_name,
+        attendanceNumber: row.attendance_number,
+        status: row.status,
+        submittedAt: row.submitted_at,
+        gradeStatus: row.grade_status || 'not_graded',
+        scores: published ? {
+          fluency: row.fluency_score,
+          flexibility: row.flexibility_score,
+          originality: row.originality_score,
+          elaboration: row.elaboration_score,
+        } : null,
+        totalScore: published ? row.total_score : null,
+        finalScore: published ? Number(row.final_score) : null,
+        category: published ? row.category : '',
+        gradedAt: published ? row.graded_at : null,
+      };
+    });
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'syncRoster',
+        token: process.env.GOOGLE_APPS_SCRIPT_TOKEN || '',
+        students,
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 400)}`);
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error('Respons Apps Script bukan JSON yang valid.');
+    }
+    if (payload.ok !== true) throw new Error(payload.error || 'Apps Script menolak sinkronisasi rekap siswa.');
+    return { configured: true, status: 'success', syncedCount: payload.syncedCount };
+  } catch (error) {
+    console.error('Student roster spreadsheet sync failed:', error);
+    return { configured: true, status: 'failed', error: String(error.message || error).slice(0, 300) };
+  }
+}
+
 async function synchronizeDeletedAttempts(attemptIds) {
   const endpoint = process.env.GOOGLE_APPS_SCRIPT_URL;
   if (!endpoint || !attemptIds.length) {
@@ -691,6 +758,11 @@ async function handle(request) {
       syncLogs: syncLogs.rows,
       spreadsheetConfigured: Boolean(process.env.GOOGLE_APPS_SCRIPT_URL),
     });
+  }
+
+  if (method === 'POST' && pathname === '/api/teacher/students/sync') {
+    requireRole(user, 'teacher');
+    return json({ sync: await synchronizeStudentRoster() });
   }
 
   const studentPath = pathname.match(/^\/api\/teacher\/students\/([^/]+)$/);
