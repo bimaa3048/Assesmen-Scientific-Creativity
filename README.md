@@ -1,10 +1,10 @@
-# Assesmen Scientific Creativity
+# Creative Thinking Skills
 
-Aplikasi web Assesmen Scientific Creativity untuk empat indikator kreativitas ilmiah dengan soal Fisika rangkaian listrik seri, paralel, dan campuran. Aplikasi siap deploy ke Vercel menggunakan Next.js App Router, PostgreSQL terkelola, dan route handler Node.js. `server.js` dan SQLite tetap tersedia khusus untuk menjalankan versi lokal lama.
+Aplikasi web Creative Thinking Skills untuk empat indikator kreativitas ilmiah dengan soal Fisika rangkaian listrik seri, paralel, dan campuran. Aplikasi siap deploy ke Vercel menggunakan Next.js App Router, PostgreSQL terkelola, dan route handler Node.js. `server.js` dan SQLite tetap tersedia khusus untuk menjalankan versi lokal lama.
 
 ## Fitur
 
-- Registrasi siswa dan login berbasis session cookie `HttpOnly`/`SameSite=Strict`.
+- Registrasi siswa dengan nama lengkap, nama sekolah, kelas, username, dan login berbasis session cookie `HttpOnly`/`SameSite=Strict`.
 - Password di-hash memakai `scrypt`; guru dapat mengubah password dan mereset password siswa.
 - Guru dapat mengubah nama lengkap dari menu **Profil**; perubahan tersimpan di PostgreSQL dan langsung tercermin di dashboard guru.
 - Guru dapat menghapus akun siswa dari daftar siswa; aksi meminta konfirmasi dan menghapus percobaan, jawaban, penilaian, sesi, serta file lampiran siswa tersebut. Jika Google Sheets dikonfigurasi, baris percobaan terkait juga dihapus melalui Apps Script.
@@ -110,7 +110,7 @@ Jangan masukkan password, token, atau connection string ke repository. Gunakan H
 5. Atur `GOOGLE_APPS_SCRIPT_URL` dengan URL deployment dan `GOOGLE_APPS_SCRIPT_TOKEN` dengan token yang sama pada environment server, lalu restart.
 6. Pengiriman jawaban tidak berjalan otomatis. Dari **Ruang guru → Daftar siswa**, guru dapat memilih **Kirim … jawaban ke Google Sheets** untuk mengirim seluruh percobaan yang sudah dikumpulkan ke tab `Hasil Asesmen`, dan **Kirim rekap … siswa selesai** untuk memperbarui tab `Rekap Siswa`. Rekap memuat siswa yang sudah mengumpulkan, status penilaian, dan nilai yang sudah dipublikasikan. Kedua tab diperbarui berdasarkan ID sehingga pengiriman ulang tidak membuat duplikat. Kegagalan pengiriman jawaban dicatat pada `sync_logs`; guru juga dapat memilih **Sinkronkan ulang spreadsheet** dari halaman jawaban.
 
-Data yang dikirim berisi identitas siswa yang memiliki percobaan, ID percobaan, status/waktu, jawaban, skor indikator yang telah dipublikasikan, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Akun siswa yang belum memulai asesmen tidak ikut dikirim. Spreadsheet merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL.
+Data yang dikirim berisi identitas siswa (termasuk nama sekolah) yang memiliki percobaan, ID percobaan, status/waktu, jawaban, skor indikator yang telah dipublikasikan, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Akun siswa yang belum memulai asesmen tidak ikut dikirim. Spreadsheet merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL.
 
 Spreadsheet belum terhubung ke akun tertentu sampai pemilik membuat Spreadsheet, menetapkan `SPREADSHEET_ID` dan `SYNC_TOKEN` di Script Properties, lalu memasukkan URL deployment dan token yang sama pada environment server. Setelah memperbarui kode Apps Script, simpan dan deploy versi Web App yang baru. Jangan mengirim token melalui chat atau menyimpan nilainya di repository. Setelah deployment, uji dengan satu percobaan siswa dan pastikan tab **Hasil Asesmen** dan **Rekap Siswa** muncul sebelum digunakan untuk seluruh kelas.
 

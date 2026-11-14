@@ -104,7 +104,7 @@ function renderAuth(mode = 'login', error = '') {
   root.innerHTML = `
     <div class="auth-layout">
       <section class="auth-story">
-        <div class="brand"><span class="brand-mark">ϟ</span><span>Assesmen Scientific Creativity</span></div>
+        <div class="brand"><span class="brand-mark">ϟ</span><span>Creative Thinking Skills</span></div>
         <div class="story-copy">
           <span class="eyebrow">Fisika · Eksplorasi · Kreativitas</span>
           <h1>Ide besar dimulai dari rasa ingin tahu.</h1>
@@ -120,6 +120,7 @@ function renderAuth(mode = 'login', error = '') {
           <div class="form-error" ${error ? '' : 'hidden'}>${escapeHtml(error)}</div>
           ${register ? `
             <div class="field"><label for="fullName">Nama lengkap</label><input id="fullName" name="fullName" autocomplete="name" required maxlength="120" placeholder="Nama sesuai daftar kelas"></div>
+            <div class="field"><label for="schoolName">Nama sekolah</label><input id="schoolName" name="schoolName" autocomplete="organization" required maxlength="160" placeholder="Nama sekolah"></div>
             <div class="form-grid">
               <div class="field"><label for="className">Kelas</label><input id="className" name="className" required maxlength="40" placeholder="Contoh: XI IPA 1"></div>
               <div class="field"><label for="attendanceNumber">Nomor absen <span class="field-hint">(opsional)</span></label><input id="attendanceNumber" name="attendanceNumber" maxlength="20" placeholder="—"></div>
@@ -184,7 +185,7 @@ function renderShell(content) {
   root.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand"><span class="brand-mark">ϟ</span><span>Assesmen Scientific Creativity</span></div>
+        <div class="brand"><span class="brand-mark">ϟ</span><span>Creative Thinking Skills</span></div>
         <div class="nav-caption">Menu utama</div>
         <nav class="nav-list" aria-label="Navigasi utama">
           ${items.map((item) => `<button class="nav-item ${app.page === item.id || (app.page === 'teacher-attempt' && item.id === 'students') ? 'active' : ''}" type="button" data-action="navigate" data-page="${item.id}"><span class="nav-icon">${item.icon}</span><span>${item.label}</span></button>`).join('')}
@@ -198,7 +199,7 @@ function renderShell(content) {
       <div class="main-column">
         <header class="topbar">
           <div class="breadcrumb"><span class="online-dot ${app.serverAvailable && navigator.onLine ? '' : 'offline'}"></span> ${!navigator.onLine ? 'Koneksi terputus' : app.serverAvailable ? 'Server aktif' : 'Server tidak merespons'}</div>
-          <div class="top-actions"><span class="top-note">Asesmen Scientific Creativity · Fisika</span><span class="avatar">${escapeHtml(initials(app.user.fullName))}</span></div>
+          <div class="top-actions"><span class="top-note">Creative Thinking Skills · Fisika</span><span class="avatar">${escapeHtml(initials(app.user.fullName))}</span></div>
         </header>
         <main class="main-content">${content}</main>
       </div>
@@ -421,7 +422,7 @@ function formatTimer(milliseconds) {
 function assessmentView() {
   const attempt = app.dashboard.attempt;
   if (!attempt) {
-    return `${pageHeading('Asesmen individu', 'Scientific Creativity · Rangkaian listrik', 'Empat soal uraian dan kinerja berbantuan PhET Circuit Construction Kit: DC. Alokasi waktu 60 menit.')}
+    return `${pageHeading('Asesmen individu', 'Creative Thinking Skills · Rangkaian listrik', 'Empat soal uraian dan kinerja berbantuan PhET Circuit Construction Kit: DC. Alokasi waktu 60 menit.')}
       <section class="card empty-state"><div class="empty-illustration">ϟ</div><h2>Mulai saat kamu siap</h2><p>Timer 60 menit dimulai saat tombol ditekan. Jawaban akan tersimpan otomatis ke server setelah setiap perubahan.</p>
       <p><strong>Pastikan kamu memiliki koneksi internet</strong> sebelum memulai asesmen.</p>
       <button class="button" data-action="start-assessment" type="button">Mulai asesmen · 60 menit →</button></section>
@@ -510,6 +511,7 @@ function profileView() {
         </form>` : `<div class="profile-value"><span>Nama lengkap</span><strong>${escapeHtml(user.fullName)}</strong></div>`}
         <div class="profile-value"><span>Username</span><strong>${escapeHtml(user.username)}</strong></div>
         ${isTeacher ? '' : `<div class="profile-value"><span>Kelas</span><strong>${escapeHtml(user.className || '—')}</strong></div>
+        <div class="profile-value"><span>Nama sekolah</span><strong>${escapeHtml(user.schoolName || '—')}</strong></div>
         <div class="profile-value"><span>Nomor absen</span><strong>${escapeHtml(user.attendanceNumber || '—')}</strong></div>`}
         <div class="profile-value"><span>Peran</span><strong>${isTeacher ? 'Guru/admin' : 'Siswa'}</strong></div>
       </section>
@@ -528,6 +530,7 @@ function attemptRow(attempt, student, teacherAttempts) {
   const name = attempt?.student.fullName || student.full_name;
   const username = attempt?.student.username || student.username;
   const className = attempt?.student.className || student.class_name || '—';
+  const schoolName = attempt?.student.schoolName || student.school_name || '—';
   const rowStatus = attempt ? statusBadge(attempt.status, attempt.gradeStatus) : '<span class="badge gray">Belum mulai</span>';
   const gradeLabel = !attempt ? '—' : attempt.gradeStatus === 'published'
     ? `<div class="dashboard-grade"><strong>${attempt.grade.finalScore}% kreativitas ilmiah</strong><span>${attempt.grade.totalScore}/16 · ${escapeHtml(attempt.grade.category)}</span><div class="dashboard-grade-breakdown">${indicators.map((indicator) => `<span>${escapeHtml(indicator.label.split(' · ')[0])} ${attempt.grade.scores[indicator.key] * 25}%</span>`).join('')}</div></div>`
@@ -537,8 +540,8 @@ function attemptRow(attempt, student, teacherAttempts) {
   const reset = `<button class="button ghost small" data-action="reset-password" data-student="${student.id}" data-name="${escapeHtml(name)}">Reset sandi</button>`;
   const resetAttempt = attempt ? `<button class="button ghost small" data-action="reset-attempt" data-attempt="${attempt.id}" data-name="${escapeHtml(name)}">Reset pengerjaan</button>` : '';
   const remove = `<button class="button danger small" data-action="delete-student" data-student="${student.id}" data-name="${escapeHtml(name)}">Hapus siswa</button>`;
-  return `<tr data-student-row data-search="${escapeHtml(`${name} ${username} ${className}`.toLocaleLowerCase())}" data-class="${escapeHtml(className)}">
-    <td><strong>${escapeHtml(name)}</strong><br><span class="field-hint">@${escapeHtml(username)}</span></td><td>${escapeHtml(className)}</td><td>${escapeHtml(student.attendance_number || attempt?.student.attendanceNumber || '—')}</td>
+  return `<tr data-student-row data-search="${escapeHtml(`${name} ${username} ${className} ${schoolName}`.toLocaleLowerCase())}" data-class="${escapeHtml(className)}">
+    <td><strong>${escapeHtml(name)}</strong><br><span class="field-hint">@${escapeHtml(username)}</span></td><td>${escapeHtml(schoolName)}</td><td>${escapeHtml(className)}</td><td>${escapeHtml(student.attendance_number || attempt?.student.attendanceNumber || '—')}</td>
     <td>${rowStatus}</td><td>${dates}</td><td>${attempt?.submittedAt ? formatDate(attempt.submittedAt) : '—'}</td><td>${gradeLabel}</td><td><div style="display:flex;flex-wrap:wrap;gap:6px">${action}${reset}${resetAttempt}${remove}</div></td>
   </tr>`;
 }
@@ -600,8 +603,8 @@ function teacherStudentsView() {
   return `${pageHeading('Ruang guru', 'Daftar siswa', 'Cari siswa, pantau asesmen, buka jawaban untuk dinilai, atau kelola akun siswa.') }
     <section class="card section-card">
       <div class="section-title"><div><h2>Daftar siswa & asesmen</h2><p>Jawaban diambil langsung dari database website saat dibuka.</p></div><span class="badge ${data.spreadsheetConfigured ? 'green' : 'gray'}">Google Sheets ${data.spreadsheetConfigured ? 'terhubung' : 'belum dikonfigurasi'}</span></div>
-      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button><button class="button small" data-action="sync-all-attempts" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim ${submittedCount} jawaban ke Google Sheets</button><button class="button secondary small" data-action="sync-student-roster" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim rekap ${submittedCount} siswa selesai</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Siswa</th><th>Kelas</th><th>Absen</th><th>Status</th><th>Waktu mulai</th><th>Waktu kumpul</th><th>Hasil penilaian & persentase</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="table-empty">Belum ada siswa terdaftar.</td></tr>'}</tbody></table></div>
+      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, sekolah, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button><button class="button small" data-action="sync-all-attempts" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim ${submittedCount} jawaban ke Google Sheets</button><button class="button secondary small" data-action="sync-student-roster" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim rekap ${submittedCount} siswa selesai</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Siswa</th><th>Sekolah</th><th>Kelas</th><th>Absen</th><th>Status</th><th>Waktu mulai</th><th>Waktu kumpul</th><th>Hasil penilaian & persentase</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="table-empty">Belum ada siswa terdaftar.</td></tr>'}</tbody></table></div>
       <p class="sync-note">${data.spreadsheetConfigured ? 'Pengiriman ke spreadsheet dilakukan saat guru menekan tombol di atas. Semua percobaan yang sudah dikumpulkan akan dikirim; siswa yang belum mengumpulkan tidak disertakan. Siswa dan jawaban tetap tersimpan di database website.' : 'Google Sheets opsional. Untuk mengaktifkan, atur GOOGLE_APPS_SCRIPT_URL dan GOOGLE_APPS_SCRIPT_TOKEN di environment server; PostgreSQL tetap menjadi sumber data utama.'}</p>
     </section>`;
 }
@@ -663,7 +666,7 @@ function teacherAttemptView() {
       <textarea class="feedback-area" name="feedback-${question.id}" maxlength="5000" placeholder="Umpan balik untuk soal ini…">${escapeHtml(feedback?.feedback_text || '')}</textarea>
     </div>`;
   }).join('');
-  return `${pageHeading('Peninjauan jawaban', attempt.student.fullName, `${attempt.student.className || 'Kelas —'} · @${attempt.student.username}`, statusBadge(attempt.status, data.grade?.status))}
+  return `${pageHeading('Peninjauan jawaban', attempt.student.fullName, `${attempt.student.schoolName || 'Sekolah —'} · ${attempt.student.className || 'Kelas —'} · @${attempt.student.username}`, statusBadge(attempt.status, data.grade?.status))}
     <div class="toolbar"><button class="button secondary small" data-action="navigate" data-page="students">← Kembali ke daftar</button><span class="field-hint">Mulai ${formatDate(attempt.startedAt)} · Kumpul ${formatDate(attempt.submittedAt)}</span></div>
     <div class="attempt-details">
       <div>${answerCards}</div>

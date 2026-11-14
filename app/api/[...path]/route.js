@@ -124,6 +124,7 @@ function cleanUser(user) {
     role: user.role,
     className: user.class_name,
     attendanceNumber: user.attendance_number,
+    schoolName: user.school_name,
     mustChangePassword: Boolean(user.must_change_password),
     createdAt: user.created_at,
   };
@@ -252,7 +253,7 @@ async function attemptForStudent(id, studentId) {
 
 async function syncPayload(attemptId) {
   const result = await pool.query(
-    `SELECT attempts.*, users.full_name, users.username, users.class_name, users.attendance_number,
+    `SELECT attempts.*, users.full_name, users.username, users.class_name, users.attendance_number, users.school_name,
             grades.status AS grade_status, grades.fluency_score, grades.flexibility_score,
             grades.originality_score, grades.elaboration_score, grades.total_score,
             grades.final_score, grades.category, grades.general_feedback, grades.graded_at
@@ -274,6 +275,7 @@ async function syncPayload(attemptId) {
       username: attempt.username,
       className: attempt.class_name,
       attendanceNumber: attempt.attendance_number,
+      schoolName: attempt.school_name,
     },
     status: attempt.status,
     startedAt: attempt.started_at,
@@ -348,7 +350,7 @@ async function synchronizeStudentRoster() {
   try {
     const result = await pool.query(
       `SELECT attempts.id AS attempt_id, users.id AS student_id, users.full_name, users.username,
-              users.class_name, users.attendance_number, attempts.status, attempts.submitted_at,
+              users.class_name, users.attendance_number, users.school_name, attempts.status, attempts.submitted_at,
               grades.status AS grade_status, grades.fluency_score, grades.flexibility_score,
               grades.originality_score, grades.elaboration_score, grades.total_score,
               grades.final_score, grades.category, grades.graded_at
@@ -367,6 +369,7 @@ async function synchronizeStudentRoster() {
         username: row.username,
         className: row.class_name,
         attendanceNumber: row.attendance_number,
+        schoolName: row.school_name,
         status: row.status,
         submittedAt: row.submitted_at,
         gradeStatus: row.grade_status || 'not_graded',
@@ -450,6 +453,7 @@ function mapAttemptList(row) {
       username: row.username,
       className: row.class_name,
       attendanceNumber: row.attendance_number,
+      schoolName: row.school_name,
     },
     status: row.status,
     startedAt: row.started_at,
@@ -474,7 +478,7 @@ function mapAttemptList(row) {
 async function teacherAttempts() {
   const result = await pool.query(
     `SELECT attempts.*, users.id AS student_id, users.full_name, users.username,
-            users.class_name, users.attendance_number, grades.status AS grade_status,
+            users.class_name, users.attendance_number, users.school_name, grades.status AS grade_status,
             grades.fluency_score, grades.flexibility_score, grades.originality_score,
             grades.elaboration_score, grades.total_score, grades.final_score, grades.category
      FROM attempts JOIN users ON users.id = attempts.student_id
@@ -502,6 +506,7 @@ async function handle(request) {
     const password = requireString(body.password, 'Kata sandi', 200);
     const confirmation = requireString(body.confirmPassword, 'Konfirmasi kata sandi', 200);
     const className = requireString(body.className, 'Kelas', 40);
+    const schoolName = requireString(body.schoolName, 'Nama sekolah', 160);
     const attendanceNumber = typeof body.attendanceNumber === 'string' ? body.attendanceNumber.trim().slice(0, 20) : '';
     if (!/^[\p{L}\p{N}._-]{3,40}$/u.test(username)) {
       fail(400, 'Username 3–40 karakter: gunakan huruf, angka, titik, garis bawah, atau tanda hubung.');
@@ -516,14 +521,15 @@ async function handle(request) {
       role: 'student',
       class_name: className,
       attendance_number: attendanceNumber || null,
+      school_name: schoolName,
       must_change_password: false,
       created_at: now(),
     };
     try {
       await pool.query(
-        `INSERT INTO users (id, full_name, username, password_hash, role, class_name, attendance_number, created_at)
-         VALUES ($1, $2, $3, $4, 'student', $5, $6, $7)`,
-        [student.id, student.full_name, student.username, student.password_hash, className, attendanceNumber || null, student.created_at],
+        `INSERT INTO users (id, full_name, username, password_hash, role, class_name, attendance_number, school_name, created_at)
+         VALUES ($1, $2, $3, $4, 'student', $5, $6, $7, $8)`,
+        [student.id, student.full_name, student.username, student.password_hash, className, attendanceNumber || null, schoolName, student.created_at],
       );
     } catch (error) {
       if (error.code === '23505') fail(409, 'Username sudah digunakan.');
@@ -737,7 +743,7 @@ async function handle(request) {
     requireRole(user, 'teacher');
     const attempts = await teacherAttempts();
     const studentsResult = await pool.query(
-      `SELECT id, full_name, username, class_name, attendance_number, created_at
+      `SELECT id, full_name, username, class_name, attendance_number, school_name, created_at
        FROM users WHERE role = 'student' ORDER BY LOWER(full_name)`,
     );
     const students = studentsResult.rows;
@@ -793,7 +799,7 @@ async function handle(request) {
   if (method === 'GET' && attemptPath) {
     requireRole(user, 'teacher');
     const result = await pool.query(
-      `SELECT attempts.*, users.full_name, users.username, users.class_name, users.attendance_number
+      `SELECT attempts.*, users.full_name, users.username, users.class_name, users.attendance_number, users.school_name
        FROM attempts JOIN users ON users.id = attempts.student_id WHERE attempts.id = $1`,
       [attemptPath[1]],
     );
@@ -820,6 +826,7 @@ async function handle(request) {
           username: attempt.username,
           className: attempt.class_name,
           attendanceNumber: attempt.attendance_number,
+          schoolName: attempt.school_name,
         },
       },
       answers,

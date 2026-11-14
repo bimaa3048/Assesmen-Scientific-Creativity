@@ -32,6 +32,7 @@ db.exec(`
     role TEXT NOT NULL CHECK (role IN ('teacher', 'student')),
     class_name TEXT,
     attendance_number TEXT,
+    school_name TEXT,
     must_change_password INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -114,6 +115,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_answers_attempt ON answers(attempt_id);
   CREATE INDEX IF NOT EXISTS idx_sync_logs_attempt ON sync_logs(attempt_id);
 `);
+if (!db.prepare('PRAGMA table_info(users)').all().some((column) => column.name === 'school_name')) {
+  db.exec('ALTER TABLE users ADD COLUMN school_name TEXT');
+}
 
 const questions = [
   {
@@ -191,7 +195,7 @@ const questions = [
 
 const assessment = {
   id: ASSESSMENT_ID,
-  title: 'Pengembangan Instrumen Asesmen Scientific Creativity Berbasis Simulasi PhET pada Materi Rangkaian Listrik Dasar untuk Siswa SMA',
+  title: 'Creative Thinking Skills Berbasis Simulasi PhET pada Materi Rangkaian Listrik Dasar untuk Siswa SMA',
   subject: 'Fisika',
   material: 'Rangkaian listrik dasar: seri, paralel, dan campuran',
   audience: 'Siswa Sekolah Menengah Atas (SMA)',
@@ -305,6 +309,7 @@ function cleanUser(user) {
     role: user.role,
     className: user.class_name,
     attendanceNumber: user.attendance_number,
+    schoolName: user.school_name,
     mustChangePassword: Boolean(user.must_change_password),
     createdAt: user.created_at,
   };
@@ -428,6 +433,7 @@ function mapAttemptList(row) {
       username: row.username,
       className: row.class_name,
       attendanceNumber: row.attendance_number,
+      schoolName: row.school_name,
     },
     status: row.status,
     startedAt: row.started_at,
@@ -446,7 +452,7 @@ function mapAttemptList(row) {
 
 function listTeacherAttempts() {
   const rows = db.prepare(`SELECT attempts.*, users.id AS student_id, users.full_name,
-    users.username, users.class_name, users.attendance_number
+    users.username, users.class_name, users.attendance_number, users.school_name
     FROM attempts JOIN users ON users.id = attempts.student_id
     ORDER BY attempts.created_at DESC`).all();
   return rows.map((row) => mapAttemptList(expireAttempt(row)));
@@ -454,7 +460,7 @@ function listTeacherAttempts() {
 
 function syncPayload(attemptId) {
   const attempt = db.prepare(`SELECT attempts.*, users.full_name, users.username,
-      users.class_name, users.attendance_number, grades.status AS grade_status,
+      users.class_name, users.attendance_number, users.school_name, grades.status AS grade_status,
       grades.fluency_score, grades.flexibility_score, grades.originality_score,
       grades.elaboration_score, grades.total_score, grades.final_score,
       grades.category, grades.general_feedback, grades.graded_at
@@ -469,6 +475,7 @@ function syncPayload(attemptId) {
       username: attempt.username,
       className: attempt.class_name,
       attendanceNumber: attempt.attendance_number,
+      schoolName: attempt.school_name,
     },
     status: attempt.status,
     startedAt: attempt.started_at,
@@ -577,6 +584,7 @@ async function route(req, res, url) {
     const password = requireString(body.password, 'Kata sandi', 200);
     const confirmation = requireString(body.confirmPassword, 'Konfirmasi kata sandi', 200);
     const className = requireString(body.className, 'Kelas', 40);
+    const schoolName = requireString(body.schoolName, 'Nama sekolah', 160);
     const attendanceNumber = typeof body.attendanceNumber === 'string' ? body.attendanceNumber.trim().slice(0, 20) : '';
     if (!/^[\p{L}\p{N}._-]{3,40}$/u.test(username)) {
       throw fail(400, 'Username 3–40 karakter: gunakan huruf, angka, titik, garis bawah, atau tanda hubung.');
@@ -592,13 +600,14 @@ async function route(req, res, url) {
       role: 'student',
       class_name: className,
       attendance_number: attendanceNumber || null,
+      school_name: schoolName,
       must_change_password: 0,
       created_at: nowIso(),
     };
     db.prepare(`INSERT INTO users
-      (id, full_name, username, password_hash, role, class_name, attendance_number, created_at)
-      VALUES (?, ?, ?, ?, 'student', ?, ?, ?)`)
-      .run(student.id, student.full_name, student.username, student.password_hash, className, attendanceNumber || null, student.created_at);
+      (id, full_name, username, password_hash, role, class_name, attendance_number, school_name, created_at)
+      VALUES (?, ?, ?, ?, 'student', ?, ?, ?, ?)`)
+      .run(student.id, student.full_name, student.username, student.password_hash, className, attendanceNumber || null, schoolName, student.created_at);
     await createSession(student, res);
     return sendJson(res, 201, { user: cleanUser(student) });
   }
@@ -796,7 +805,7 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/teacher/dashboard') {
     requireRole(user, 'teacher');
     const attempts = listTeacherAttempts();
-    const students = db.prepare(`SELECT id, full_name, username, class_name, attendance_number, created_at
+    const students = db.prepare(`SELECT id, full_name, username, class_name, attendance_number, school_name, created_at
       FROM users WHERE role = 'student' ORDER BY full_name COLLATE NOCASE`).all();
     const counts = {
       notStarted: students.filter((student) => !attempts.some((attempt) => attempt.student.id === student.id)).length,
@@ -876,7 +885,7 @@ async function route(req, res, url) {
   if (method === 'GET' && teacherAttemptMatch) {
     requireRole(user, 'teacher');
     const attempt = db.prepare(`SELECT attempts.*, users.full_name, users.username, users.class_name,
-      users.attendance_number FROM attempts JOIN users ON users.id = attempts.student_id
+      users.attendance_number, users.school_name FROM attempts JOIN users ON users.id = attempts.student_id
       WHERE attempts.id = ?`).get(teacherAttemptMatch[1]);
     if (!attempt) throw fail(404, 'Percobaan asesmen tidak ditemukan.');
     expireAttempt(attempt);
@@ -892,6 +901,7 @@ async function route(req, res, url) {
           username: attempt.username,
           className: attempt.class_name,
           attendanceNumber: attempt.attendance_number,
+          schoolName: attempt.school_name,
         },
       },
       answers: readAnswers(attempt.id),

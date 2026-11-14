@@ -6,9 +6,11 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK (role IN ('teacher', 'student')),
   class_name TEXT,
   attendance_number TEXT,
+  school_name TEXT,
   must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS school_name TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique ON users (LOWER(username));
 
 CREATE TABLE IF NOT EXISTS assessments (

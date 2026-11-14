@@ -87,9 +87,11 @@ test('student saves and restores answers, submits, and sees teacher-published re
     confirmPassword: 'StudentIntegration123',
     className: 'XI IPA 1',
     attendanceNumber: '5',
+    schoolName: 'SMA Integrasi',
   });
   assert.equal(registration.status, 201);
   assert.equal(registration.payload.user.role, 'student');
+  assert.equal(registration.payload.user.schoolName, 'SMA Integrasi');
   assert.equal('password' in registration.payload.user, false);
   let studentCookie = registration.cookie;
 
@@ -204,6 +206,8 @@ test('student saves and restores answers, submits, and sees teacher-published re
   assert.equal(published.payload.grade.total, 13);
   assert.equal(published.payload.grade.finalScore, 81.25);
   const teacherDashboardAfterGrading = await request('/api/teacher/dashboard', 'GET', undefined, teacherCookie);
+  const registeredStudent = teacherDashboardAfterGrading.payload.students.find((student) => student.id === registration.payload.user.id);
+  assert.equal(registeredStudent.school_name, 'SMA Integrasi');
   const dashboardGrade = teacherDashboardAfterGrading.payload.attempts.find((attempt) => attempt.id === attemptId).grade;
   assert.equal(dashboardGrade.finalScore, 81.25);
   assert.equal(dashboardGrade.totalScore, 13);
@@ -219,6 +223,7 @@ test('student saves and restores answers, submits, and sees teacher-published re
     password: 'StudentIntegration123',
     confirmPassword: 'StudentIntegration123',
     className: 'XI IPA 2',
+    schoolName: 'SMA Integrasi',
   });
   const crossAttempt = await request(`/api/attempts/${attemptId}/answers/q1`, 'PUT', answer, otherStudent.cookie);
   assert.equal(crossAttempt.status, 404);
@@ -235,6 +240,7 @@ test('student saves and restores answers, submits, and sees teacher-published re
     password: 'StudentIntegration123',
     confirmPassword: 'StudentIntegration123',
     className: 'XI IPA 3',
+    schoolName: 'SMA Integrasi',
   });
   const removableStarted = await request('/api/attempts/start', 'POST', {}, removableStudent.cookie);
   const uploadFilesBeforeDelete = new Set(fs.readdirSync(path.join(dataDir, 'uploads')));
@@ -273,6 +279,7 @@ test('student saves and restores answers, submits, and sees teacher-published re
     password: 'StudentIntegration123',
     confirmPassword: 'StudentIntegration123',
     className: 'XI IPA 4',
+    schoolName: 'SMA Integrasi',
   });
   const resettableAttempt = await request('/api/attempts/start', 'POST', {}, resettableStudent.cookie);
   const resettableAttemptId = resettableAttempt.payload.attempt.id;

@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Assesmen Scientific Creativity',
-  description: 'Asesmen Scientific Creativity Fisika berbasis simulasi PhET untuk siswa SMA.',
+  title: 'Creative Thinking Skills',
+  description: 'Creative Thinking Skills untuk Fisika berbasis simulasi PhET bagi siswa SMA.',
 };
 
 export default function RootLayout({ children }) {

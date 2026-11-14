@@ -2,7 +2,7 @@
   "name": "scientific-creativity-assessment",
   "version": "1.0.0",
   "private": true,
-  "description": "Aplikasi asesmen Scientific Creativity berbasis PhET Circuit Construction Kit: DC",
+  "description": "Aplikasi Creative Thinking Skills berbasis PhET Circuit Construction Kit: DC",
   "main": "server.js",
   "scripts": {
     "dev": "next dev",
