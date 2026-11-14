@@ -54,74 +54,97 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: 'SPREADSHEET_ID belum diatur.' });
     }
     if (payload.action === 'syncRoster') {
+      const attempts = Array.isArray(payload.attempts)
+        ? payload.attempts
+        : (Array.isArray(payload.students) ? payload.students.filter((student) => student && student.attemptId) : []);
       if (!Array.isArray(payload.students) || payload.students.some((student) => (
-        !student || typeof student.studentId !== 'string' || !student.studentId ||
-        typeof student.attemptId !== 'string' || !student.attemptId
+        !student || typeof student.studentId !== 'string' || !student.studentId
+      )) || !Array.isArray(attempts) || attempts.some((attempt) => (
+        !attempt || typeof attempt.studentId !== 'string' || !attempt.studentId ||
+        typeof attempt.attemptId !== 'string' || !attempt.attemptId
       ))) {
-        return jsonResponse({ ok: false, error: 'Daftar siswa selesai asesmen tidak valid.' });
+        return jsonResponse({ ok: false, error: 'Daftar profil atau hasil asesmen tidak valid.' });
       }
       const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-      const sheet = spreadsheet.getSheetByName('Rekap Siswa') || spreadsheet.insertSheet('Rekap Siswa');
-      const headers = [
+      const profileSheet = spreadsheet.getSheetByName('Profil Siswa') || spreadsheet.insertSheet('Profil Siswa');
+      const profileHeaders = [
+        'ID Siswa', 'Nama', 'Username', 'Nama Sekolah', 'Kelas', 'Nomor Absen', 'Terdaftar Sejak',
+      ];
+      if (!ensureHeaders(profileSheet, profileHeaders)) {
+        return jsonResponse({ ok: false, error: 'Susunan kolom tab Profil Siswa tidak sesuai versi aplikasi.' });
+      }
+      const rosterSheet = spreadsheet.getSheetByName('Rekap Siswa') || spreadsheet.insertSheet('Rekap Siswa');
+      const rosterHeaders = [
         'ID Siswa', 'ID Percobaan', 'Nama', 'Username', 'Kelas', 'Nomor Absen',
         'Status Asesmen', 'Waktu Pengumpulan', 'Status Penilaian',
         'Skor Fluency', 'Skor Flexibility', 'Skor Originality', 'Skor Elaboration',
         'Skor Total', 'Nilai Akhir', 'Kategori', 'Waktu Penilaian', 'Nama Sekolah',
       ];
-      if (!ensureHeaders(sheet, headers)) {
+      if (!ensureHeaders(rosterSheet, rosterHeaders)) {
         return jsonResponse({ ok: false, error: 'Susunan kolom tab Rekap Siswa tidak sesuai versi aplikasi.' });
       }
-
-      const lastRow = sheet.getLastRow();
-      const ids = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat() : [];
-      const rowByStudentId = new Map(ids.map((id, index) => [String(id), index + 2]));
-      const newRows = [];
-      payload.students.forEach((student) => {
-        const scores = student.scores || {};
-        const values = [
-          sheetCell(student.studentId),
-          sheetCell(student.attemptId),
-          sheetCell(student.fullName || ''),
-          sheetCell(student.username || ''),
-          sheetCell(student.className || ''),
-          sheetCell(student.attendanceNumber || ''),
-          sheetCell(student.status || ''),
-          sheetCell(student.submittedAt || ''),
-          sheetCell(student.gradeStatus || 'not_graded'),
+      const profileRows = payload.students.map((student) => [
+        sheetCell(student.studentId),
+        sheetCell(student.fullName || ''),
+        sheetCell(student.username || ''),
+        sheetCell(student.schoolName || ''),
+        sheetCell(student.className || ''),
+        sheetCell(student.attendanceNumber || ''),
+        sheetCell(student.registeredAt || ''),
+      ]);
+      const rosterRows = attempts.map((attempt) => {
+        const scores = attempt.scores || {};
+        return [
+          sheetCell(attempt.studentId),
+          sheetCell(attempt.attemptId),
+          sheetCell(attempt.fullName || ''),
+          sheetCell(attempt.username || ''),
+          sheetCell(attempt.className || ''),
+          sheetCell(attempt.attendanceNumber || ''),
+          sheetCell(attempt.status || ''),
+          sheetCell(attempt.submittedAt || ''),
+          sheetCell(attempt.gradeStatus || 'not_graded'),
           scoreCell(scores.fluency),
           scoreCell(scores.flexibility),
           scoreCell(scores.originality),
           scoreCell(scores.elaboration),
-          scoreCell(student.totalScore),
-          scoreCell(student.finalScore),
-          sheetCell(student.category || ''),
-          sheetCell(student.gradedAt || ''),
-          sheetCell(student.schoolName || ''),
+          scoreCell(attempt.totalScore),
+          scoreCell(attempt.finalScore),
+          sheetCell(attempt.category || ''),
+          sheetCell(attempt.gradedAt || ''),
+          sheetCell(attempt.schoolName || ''),
         ];
-        const rowNumber = rowByStudentId.get(String(student.studentId));
-        if (rowNumber) {
-          sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
-        } else {
-          newRows.push(values);
-        }
       });
-      if (newRows.length) {
-        sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
-      }
-      return jsonResponse({ ok: true, syncedCount: payload.students.length });
+      replaceSheetRows(profileSheet, profileHeaders.length, profileRows);
+      replaceSheetRows(rosterSheet, rosterHeaders.length, rosterRows);
+      return jsonResponse({
+        ok: true,
+        profileCount: payload.students.length,
+        syncedCount: attempts.length,
+      });
     }
     if (payload.action === 'deleteAttempts') {
       if (!Array.isArray(payload.attemptIds) || payload.attemptIds.some((id) => typeof id !== 'string' || !id)) {
         return jsonResponse({ ok: false, error: 'Daftar ID percobaan tidak valid.' });
       }
-      if (payload.attemptIds.length === 0) {
+      const studentIds = payload.studentIds || [];
+      if (!Array.isArray(studentIds) || studentIds.some((id) => typeof id !== 'string' || !id)) {
+        return jsonResponse({ ok: false, error: 'Daftar ID siswa tidak valid.' });
+      }
+      if (payload.attemptIds.length === 0 && studentIds.length === 0) {
         return jsonResponse({ ok: true, deletedRows: 0 });
       }
       const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
       const idsToDelete = new Set(payload.attemptIds);
+      const studentIdsToDelete = new Set(studentIds);
+      const photoSheet = spreadsheet.getSheetByName('Lampiran Foto');
+      const deletedFiles = deleteDriveFilesForAttempts(photoSheet, idsToDelete);
       const deletedRows = deleteRowsMatching(spreadsheet.getSheetByName('Hasil Asesmen'), 1, idsToDelete) +
-        deleteRowsMatching(spreadsheet.getSheetByName('Rekap Siswa'), 2, idsToDelete);
-      return jsonResponse({ ok: true, deletedRows });
+        deleteRowsMatching(spreadsheet.getSheetByName('Rekap Siswa'), 1, studentIdsToDelete) +
+        deleteRowsMatching(spreadsheet.getSheetByName('Rekap Siswa'), 2, idsToDelete) +
+        deleteRowsMatching(spreadsheet.getSheetByName('Profil Siswa'), 1, studentIdsToDelete) +
+        deleteRowsMatching(photoSheet, 1, idsToDelete);
+      return jsonResponse({ ok: true, deletedRows, deletedFiles });
     }
     if (!payload.attemptId || !payload.student) {
       return jsonResponse({ ok: false, error: 'ID percobaan atau identitas siswa tidak tersedia.' });
@@ -139,6 +162,7 @@ function doPost(e) {
     if (!ensureHeaders(sheet, headers)) {
       return jsonResponse({ ok: false, error: 'Susunan kolom spreadsheet tidak sesuai versi aplikasi.' });
     }
+    const driveAttachments = copyAttachmentsToDrive(spreadsheet, payload, expectedToken);
 
     const grade = payload.grade || {};
     const scores = grade.scores || {};
@@ -153,7 +177,7 @@ function doPost(e) {
       sheetCell(payload.deadlineAt || ''),
       sheetCell(payload.submittedAt || ''),
       sheetCell(JSON.stringify(payload.answers || [])),
-      sheetCell(JSON.stringify(payload.attachments || [])),
+      sheetCell(JSON.stringify(driveAttachments)),
       scoreCell(scores.fluency),
       scoreCell(scores.flexibility),
       scoreCell(scores.originality),
@@ -193,6 +217,138 @@ function ensureHeaders(sheet, headers) {
   if (!isPreviousVersion) return false;
   sheet.getRange(1, headers.length).setValue(headers[headers.length - 1]);
   return true;
+}
+
+function replaceSheetRows(sheet, columnCount, rows) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, columnCount).clearContent();
+  if (rows.length) sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
+}
+
+function copyAttachmentsToDrive(spreadsheet, payload, expectedToken) {
+  const attachments = payload.attachments || [];
+  if (!Array.isArray(attachments)) throw new Error('Daftar lampiran tidak valid.');
+  const sheet = spreadsheet.getSheetByName('Lampiran Foto') || spreadsheet.insertSheet('Lampiran Foto');
+  const headers = [
+    'ID Percobaan', 'ID Lampiran', 'ID Siswa', 'Nama Siswa', 'Username',
+    'Nama Sekolah', 'Kelas', 'ID Soal', 'Nama File', 'Tipe File',
+    'Ukuran (byte)', 'File Google Drive', 'ID File Drive', 'Waktu Unggah',
+  ];
+  if (!ensureHeaders(sheet, headers)) {
+    throw new Error('Susunan kolom tab Lampiran Foto tidak sesuai versi aplikasi.');
+  }
+  if (!attachments.length) return [];
+  if (!payload.student || !payload.student.studentId) {
+    throw new Error('Profil siswa tidak tersedia untuk lampiran.');
+  }
+  const properties = PropertiesService.getScriptProperties();
+  const appUrl = (properties.getProperty('VERCEL_APP_URL') || '').replace(/\/$/, '');
+  if (!appUrl) throw new Error('VERCEL_APP_URL wajib diatur untuk menyalin foto ke Google Drive.');
+  const expectedPrefix = appUrl + '/api/sync/attachments/';
+  const folder = getPhotoFolder(properties);
+  const lastRow = sheet.getLastRow();
+  const existingIds = lastRow > 1
+    ? sheet.getRange(2, 2, lastRow - 1, 1).getValues().flat()
+    : [];
+  const rowByAttachmentId = new Map(existingIds.map((id, index) => [String(id), index + 2]));
+  const driveAttachments = [];
+
+  attachments.forEach((attachment) => {
+    if (!attachment || typeof attachment.id !== 'string' ||
+        !/^[0-9a-f-]{36}$/i.test(attachment.id) ||
+        attachment.url !== expectedPrefix + encodeURIComponent(attachment.id) ||
+        !['image/jpeg', 'image/png', 'image/webp'].includes(attachment.mimeType)) {
+      throw new Error('Data lampiran tidak valid atau alamat foto tidak sesuai.');
+    }
+    const originalName = String(attachment.originalName || 'foto-siswa').replace(/[\\/\u0000-\u001f]/g, '_').slice(0, 120);
+    const driveFileName = attachment.id + '_' + originalName;
+    const existingFiles = folder.getFilesByName(driveFileName);
+    let file;
+    if (existingFiles.hasNext()) {
+      file = existingFiles.next();
+    } else {
+      const response = UrlFetchApp.fetch(attachment.url, {
+        headers: { Authorization: 'Bearer ' + expectedToken },
+        muteHttpExceptions: true,
+      });
+      if (response.getResponseCode() !== 200) {
+        throw new Error('Gagal mengambil foto ' + originalName + ' dari aplikasi (HTTP ' + response.getResponseCode() + ').');
+      }
+      const blob = response.getBlob();
+      const sizeBytes = blob.getBytes().length;
+      if (sizeBytes < 1 || sizeBytes > 3 * 1024 * 1024 ||
+          Number(attachment.sizeBytes) !== sizeBytes ||
+          blob.getContentType() !== attachment.mimeType) {
+        throw new Error('Ukuran atau tipe file foto ' + originalName + ' tidak sesuai.');
+      }
+      file = folder.createFile(blob.setName(driveFileName));
+    }
+
+    const rowValues = [
+      sheetCell(payload.attemptId),
+      sheetCell(attachment.id),
+      sheetCell(payload.student.studentId),
+      sheetCell(payload.student.fullName || ''),
+      sheetCell(payload.student.username || ''),
+      sheetCell(payload.student.schoolName || ''),
+      sheetCell(payload.student.className || ''),
+      sheetCell(attachment.questionId || ''),
+      sheetCell(originalName),
+      sheetCell(attachment.mimeType),
+      Number(attachment.sizeBytes),
+      file.getUrl(),
+      file.getId(),
+      sheetCell(attachment.createdAt || ''),
+    ];
+    const rowNumber = rowByAttachmentId.get(attachment.id);
+    if (rowNumber) {
+      writePhotoRow(sheet, rowNumber, rowValues);
+    } else {
+      const newRow = sheet.getLastRow() + 1;
+      writePhotoRow(sheet, newRow, rowValues);
+      rowByAttachmentId.set(attachment.id, newRow);
+    }
+    driveAttachments.push({
+      id: attachment.id,
+      questionId: attachment.questionId,
+      originalName,
+      mimeType: attachment.mimeType,
+      sizeBytes: Number(attachment.sizeBytes),
+      driveUrl: file.getUrl(),
+    });
+  });
+  return driveAttachments;
+}
+
+function writePhotoRow(sheet, rowNumber, values) {
+  sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
+  const url = String(values[11]);
+  sheet.getRange(rowNumber, 12).setRichTextValue(
+    SpreadsheetApp.newRichTextValue().setText(url).setLinkUrl(url).build(),
+  );
+}
+
+function getPhotoFolder(properties) {
+  const folderId = properties.getProperty('DRIVE_FOLDER_ID');
+  const folder = folderId
+    ? DriveApp.getFolderById(folderId)
+    : DriveApp.createFolder('Creative Thinking Skills - Foto Siswa');
+  if (!folderId) properties.setProperty('DRIVE_FOLDER_ID', folder.getId());
+  const access = folder.getSharingAccess();
+  if (access === DriveApp.Access.ANYONE || access === DriveApp.Access.ANYONE_WITH_LINK) {
+    throw new Error('Folder foto harus privat; jangan gunakan akses siapa saja atau siapa saja yang memiliki link.');
+  }
+  return folder;
+}
+
+function deleteDriveFilesForAttempts(sheet, attemptIds) {
+  if (!sheet || !attemptIds.size || sheet.getLastRow() < 2 || sheet.getLastColumn() < 13) return 0;
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 13).getValues();
+  const fileIds = rows
+    .filter((row) => attemptIds.has(String(row[0])) && row[12])
+    .map((row) => String(row[12]));
+  fileIds.forEach((fileId) => DriveApp.getFileById(fileId).setTrashed(true));
+  return fileIds.length;
 }
 
 function deleteRowsMatching(sheet, column, idsToDelete) {

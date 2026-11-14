@@ -268,9 +268,17 @@ async function syncPayload(attemptId) {
      FROM attachments WHERE attempt_id = $1 ORDER BY created_at`,
     [attemptId],
   );
+  const appPublicUrl = process.env.APP_PUBLIC_URL?.replace(/\/$/, '');
+  if (attachmentResult.rowCount && !appPublicUrl) {
+    throw new Error('APP_PUBLIC_URL wajib diatur agar foto dapat disalin ke Google Drive.');
+  }
+  if (attachmentResult.rowCount && !/^https:\/\//i.test(appPublicUrl)) {
+    throw new Error('APP_PUBLIC_URL harus berupa URL HTTPS agar foto dapat disalin ke Google Drive.');
+  }
   return {
     attemptId,
     student: {
+      studentId: attempt.student_id,
       fullName: attempt.full_name,
       username: attempt.username,
       className: attempt.class_name,
@@ -289,7 +297,7 @@ async function syncPayload(attemptId) {
       mimeType: attachment.mime_type,
       sizeBytes: attachment.size_bytes,
       createdAt: attachment.created_at,
-      url: `${(process.env.APP_PUBLIC_URL || '').replace(/\/$/, '')}/api/attachments/${encodeURIComponent(attachment.id)}`,
+      url: `${appPublicUrl}/api/sync/attachments/${encodeURIComponent(attachment.id)}`,
     })),
     grade: attempt.grade_status === 'published' ? {
       scores: {
@@ -323,7 +331,7 @@ async function synchronizeAttempt(attemptId) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: process.env.GOOGLE_APPS_SCRIPT_TOKEN || '', ...await syncPayload(attemptId) }),
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(25000),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 400)}`);
@@ -348,6 +356,10 @@ async function synchronizeStudentRoster() {
   if (!endpoint) return { configured: false, status: 'not_configured' };
 
   try {
+    const profilesResult = await pool.query(
+      `SELECT id, full_name, username, class_name, attendance_number, school_name, created_at
+       FROM users WHERE role = 'student' ORDER BY LOWER(full_name)`,
+    );
     const result = await pool.query(
       `SELECT attempts.id AS attempt_id, users.id AS student_id, users.full_name, users.username,
               users.class_name, users.attendance_number, users.school_name, attempts.status, attempts.submitted_at,
@@ -360,7 +372,16 @@ async function synchronizeStudentRoster() {
        WHERE attempts.status = 'submitted'
        ORDER BY users.full_name`,
     );
-    const students = result.rows.map((row) => {
+    const students = profilesResult.rows.map((row) => ({
+       studentId: row.id,
+       fullName: row.full_name,
+       username: row.username,
+       className: row.class_name,
+       attendanceNumber: row.attendance_number,
+       schoolName: row.school_name,
+       registeredAt: row.created_at,
+    }));
+    const attempts = result.rows.map((row) => {
       const published = row.grade_status === 'published';
       return {
         studentId: row.student_id,
@@ -392,6 +413,7 @@ async function synchronizeStudentRoster() {
         action: 'syncRoster',
         token: process.env.GOOGLE_APPS_SCRIPT_TOKEN || '',
         students,
+        attempts,
       }),
       signal: AbortSignal.timeout(12000),
     });
@@ -404,16 +426,21 @@ async function synchronizeStudentRoster() {
       throw new Error('Respons Apps Script bukan JSON yang valid.');
     }
     if (payload.ok !== true) throw new Error(payload.error || 'Apps Script menolak sinkronisasi rekap siswa.');
-    return { configured: true, status: 'success', syncedCount: payload.syncedCount };
+    return {
+      configured: true,
+      status: 'success',
+      syncedCount: payload.syncedCount,
+      profileCount: payload.profileCount,
+    };
   } catch (error) {
     console.error('Student roster spreadsheet sync failed:', error);
     return { configured: true, status: 'failed', error: String(error.message || error).slice(0, 300) };
   }
 }
 
-async function synchronizeDeletedAttempts(attemptIds) {
+async function synchronizeDeletedAttempts(attemptIds, studentIds = []) {
   const endpoint = process.env.GOOGLE_APPS_SCRIPT_URL;
-  if (!endpoint || !attemptIds.length) {
+  if (!endpoint || (!attemptIds.length && !studentIds.length)) {
     return { configured: Boolean(endpoint), status: endpoint ? 'not_needed' : 'not_configured' };
   }
   try {
@@ -424,6 +451,7 @@ async function synchronizeDeletedAttempts(attemptIds) {
         action: 'deleteAttempts',
         token: process.env.GOOGLE_APPS_SCRIPT_TOKEN || '',
         attemptIds,
+        studentIds,
       }),
       signal: AbortSignal.timeout(12000),
     });
@@ -496,6 +524,34 @@ async function handle(request) {
   await initialize();
   const method = request.method;
   const pathname = decodeURIComponent(request.nextUrl.pathname);
+  const syncAttachmentPath = pathname.match(/^\/api\/sync\/attachments\/([0-9a-f-]{36})$/i);
+  if (['GET', 'HEAD'].includes(method) && syncAttachmentPath) {
+    const expectedToken = process.env.GOOGLE_APPS_SCRIPT_TOKEN || '';
+    const authorization = request.headers.get('authorization') || '';
+    const suppliedToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const expectedDigest = crypto.createHash('sha256').update(expectedToken).digest();
+    const suppliedDigest = crypto.createHash('sha256').update(suppliedToken).digest();
+    if (!expectedToken) fail(503, 'Sinkronisasi Google Apps Script belum dikonfigurasi.');
+    if (!suppliedToken || !crypto.timingSafeEqual(expectedDigest, suppliedDigest)) {
+      fail(403, 'Token sinkronisasi tidak valid.');
+    }
+
+    const result = await pool.query(
+      `SELECT data, mime_type, size_bytes FROM attachments WHERE id = $1`,
+      [syncAttachmentPath[1]],
+    );
+    const attachment = result.rows[0];
+    if (!attachment) fail(404, 'Lampiran tidak ditemukan.');
+    return new Response(method === 'HEAD' ? null : attachment.data, {
+      status: 200,
+      headers: {
+        'Content-Type': attachment.mime_type,
+        'Content-Length': String(attachment.size_bytes),
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
   const user = await userForRequest(request);
   if (!['GET', 'HEAD'].includes(method)) validateOrigin(request);
 
@@ -782,7 +838,11 @@ async function handle(request) {
     await transaction(async (client) => {
       await client.query('DELETE FROM users WHERE id = $1 AND role = $2', [studentId, 'student']);
     });
-    return json({ deleted: true, cleanupErrors: [], spreadsheetCleanup: await synchronizeDeletedAttempts(attemptIds) });
+    return json({
+      deleted: true,
+      cleanupErrors: [],
+      spreadsheetCleanup: await synchronizeDeletedAttempts(attemptIds, [studentId]),
+    });
   }
 
   const attemptPath = pathname.match(/^\/api\/teacher\/attempts\/([^/]+)$/);

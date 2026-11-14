@@ -603,9 +603,9 @@ function teacherStudentsView() {
   return `${pageHeading('Ruang guru', 'Daftar siswa', 'Cari siswa, pantau asesmen, buka jawaban untuk dinilai, atau kelola akun siswa.') }
     <section class="card section-card">
       <div class="section-title"><div><h2>Daftar siswa & asesmen</h2><p>Jawaban diambil langsung dari database website saat dibuka.</p></div><span class="badge ${data.spreadsheetConfigured ? 'green' : 'gray'}">Google Sheets ${data.spreadsheetConfigured ? 'terhubung' : 'belum dikonfigurasi'}</span></div>
-      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, sekolah, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button><button class="button small" data-action="sync-all-attempts" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim ${submittedCount} jawaban ke Google Sheets</button><button class="button secondary small" data-action="sync-student-roster" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim rekap ${submittedCount} siswa selesai</button></div>
+      <div class="toolbar"><input id="student-search" type="search" placeholder="Cari nama, sekolah, username, atau kelas…" aria-label="Cari siswa"><select id="class-filter"><option value="">Semua kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('')}</select><button class="button secondary small" data-action="refresh-teacher">↻ Muat ulang</button><button class="button small" data-action="sync-all-attempts" ${!data.spreadsheetConfigured || !submittedCount ? 'disabled' : ''}>Kirim ${submittedCount} jawaban & foto ke Sheets</button><button class="button secondary small" data-action="sync-student-roster" ${!data.spreadsheetConfigured || !data.students.length ? 'disabled' : ''}>Kirim ${data.students.length} profil & rekap</button></div>
       <div class="table-wrap"><table><thead><tr><th>Siswa</th><th>Sekolah</th><th>Kelas</th><th>Absen</th><th>Status</th><th>Waktu mulai</th><th>Waktu kumpul</th><th>Hasil penilaian & persentase</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="table-empty">Belum ada siswa terdaftar.</td></tr>'}</tbody></table></div>
-      <p class="sync-note">${data.spreadsheetConfigured ? 'Pengiriman ke spreadsheet dilakukan saat guru menekan tombol di atas. Semua percobaan yang sudah dikumpulkan akan dikirim; siswa yang belum mengumpulkan tidak disertakan. Siswa dan jawaban tetap tersimpan di database website.' : 'Google Sheets opsional. Untuk mengaktifkan, atur GOOGLE_APPS_SCRIPT_URL dan GOOGLE_APPS_SCRIPT_TOKEN di environment server; PostgreSQL tetap menjadi sumber data utama.'}</p>
+      <p class="sync-note">${data.spreadsheetConfigured ? 'Gunakan tombol pertama untuk menyalin jawaban dan foto ke Google Sheets/Drive; tombol kedua memperbarui semua profil dan rekap nilai. Foto disimpan privat di Google Drive. Data utama tetap tersimpan di PostgreSQL.' : 'Google Sheets opsional. Untuk mengaktifkan, atur GOOGLE_APPS_SCRIPT_URL dan GOOGLE_APPS_SCRIPT_TOKEN di environment server; PostgreSQL tetap menjadi sumber data utama.'}</p>
     </section>`;
 }
 
@@ -1228,13 +1228,13 @@ root.addEventListener('click', async (event) => {
     if (action === 'save-grade') return await submitGrade(button);
     if (action === 'sync-all-attempts') return await syncAllSubmittedAttempts(button);
     if (action === 'sync-student-roster') {
-      if (!window.confirm(`Kirim atau perbarui rekap ${app.teacherData.counts.submitted} siswa yang sudah mengumpulkan asesmen?`)) return;
+      if (!window.confirm(`Kirim atau perbarui ${app.teacherData.students.length} profil siswa dan rekap nilai untuk siswa yang sudah mengumpulkan asesmen?`)) return;
       button.disabled = true;
       button.textContent = 'Mengirim rekap…';
       try {
         const result = await api('/api/teacher/students/sync', { method: 'POST', body: '{}' });
         if (result.sync.status === 'success') {
-          toast(`Rekap ${result.sync.syncedCount} siswa berhasil diperbarui pada tab Rekap Siswa.`);
+          toast(`${result.sync.profileCount} profil siswa dan rekap ${result.sync.syncedCount} percobaan berhasil diperbarui.`);
         } else {
           toast(result.sync.status === 'not_configured'
             ? 'Google Sheets belum dikonfigurasi di server.'

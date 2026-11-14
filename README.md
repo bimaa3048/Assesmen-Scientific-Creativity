@@ -90,7 +90,7 @@ Konfigurasi server melalui environment:
 | `DATABASE_URL` | — | Wajib: connection string PostgreSQL; gunakan connection string pooled dari penyedia database |
 | `PG_POOL_MAX` | `5` | Ukuran maksimum kumpulan koneksi PostgreSQL per instance |
 | `NODE_ENV` | dikelola platform | Cookie sesi memakai atribut `Secure` ketika production |
-| `APP_PUBLIC_URL` | kosong | URL publik aplikasi (mis. `https://asesmen.sekolah.id`) untuk tautan lampiran pada data spreadsheet |
+| `APP_PUBLIC_URL` | kosong | URL HTTPS publik aplikasi; wajib diatur agar Apps Script dapat mengambil foto dan menyalinnya ke Drive |
 | `TEACHER_USERNAME` | `Bimaaditya` | Username akun awal jika belum ada |
 | `TEACHER_NAME` | `Guru Fisika` | Nama akun guru awal |
 | `TEACHER_PASSWORD` | kosong pada production | Wajib di production untuk seed akun awal; simpan hanya sebagai secret environment |
@@ -106,13 +106,18 @@ Jangan masukkan password, token, atau connection string ke repository. Gunakan H
 3. Pada **Project Settings → Script Properties**, tambahkan:
    - `SPREADSHEET_ID`: ID spreadsheet.
    - `SYNC_TOKEN`: secret acak panjang yang sama dengan `GOOGLE_APPS_SCRIPT_TOKEN` di server.
+   - `VERCEL_APP_URL`: URL HTTPS aplikasi Vercel; samakan dengan `APP_PUBLIC_URL`.
+   - `DRIVE_FOLDER_ID`: opsional, ID folder Drive privat untuk menyimpan foto. Jika tidak diatur, folder dibuat otomatis saat sinkronisasi foto pertama.
 4. **Deploy → New deployment → Web app**. Jalankan sebagai akun pemilik spreadsheet, lalu atur akses Web App sesuai kebijakan sekolah. Endpoint perlu dapat dipanggil server aplikasi.
-5. Atur `GOOGLE_APPS_SCRIPT_URL` dengan URL deployment dan `GOOGLE_APPS_SCRIPT_TOKEN` dengan token yang sama pada environment server, lalu restart.
-6. Pengiriman jawaban tidak berjalan otomatis. Dari **Ruang guru → Daftar siswa**, guru dapat memilih **Kirim … jawaban ke Google Sheets** untuk mengirim seluruh percobaan yang sudah dikumpulkan ke tab `Hasil Asesmen`, dan **Kirim rekap … siswa selesai** untuk memperbarui tab `Rekap Siswa`. Rekap memuat siswa yang sudah mengumpulkan, status penilaian, dan nilai yang sudah dipublikasikan. Kedua tab diperbarui berdasarkan ID sehingga pengiriman ulang tidak membuat duplikat. Kegagalan pengiriman jawaban dicatat pada `sync_logs`; guru juga dapat memilih **Sinkronkan ulang spreadsheet** dari halaman jawaban.
+5. Atur `APP_PUBLIC_URL` pada environment Vercel ke URL HTTPS aplikasi. Atur `GOOGLE_APPS_SCRIPT_URL` dengan URL deployment dan `GOOGLE_APPS_SCRIPT_TOKEN` dengan token yang sama pada environment server, lalu redeploy.
+6. Pengiriman tidak berjalan otomatis. Dari **Ruang guru → Daftar siswa**:
+   - **Kirim jawaban & foto ke Sheets** mengirim jawaban ke tab `Hasil Asesmen` dan menyalin foto ke folder Drive privat. Tautan foto yang dapat diklik serta identitas siswa dan soal ada di tab `Lampiran Foto`.
+   - **Kirim profil & rekap** memperbarui tab `Profil Siswa` untuk seluruh siswa serta tab `Rekap Siswa` untuk percobaan yang sudah dikumpulkan, termasuk status penilaian dan nilai akhir yang telah dipublikasikan.
+   Tab dikelola aplikasi dan diperbarui tanpa menggandakan baris saat sinkronisasi diulang. Kegagalan pengiriman jawaban dicatat pada `sync_logs`; guru juga dapat memilih **Sinkronkan ulang spreadsheet** dari halaman jawaban.
 
-Data yang dikirim berisi identitas siswa (termasuk nama sekolah) yang memiliki percobaan, ID percobaan, status/waktu, jawaban, skor indikator yang telah dipublikasikan, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Akun siswa yang belum memulai asesmen tidak ikut dikirim. Spreadsheet merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL.
+Data yang dikirim berisi profil siswa (termasuk nama sekolah), jawaban, tautan foto, status/waktu, skor indikator yang telah dipublikasikan, skor total, nilai akhir, kategori, umpan balik umum, dan waktu penilaian. Spreadsheet dan Drive merupakan salinan; jika sinkronisasi gagal, data utama tidak hilang dari PostgreSQL. Foto tidak dibuat publik. Folder Drive dibuat dengan akses terbatas; bagikan folder itu hanya kepada guru/staf yang berwenang agar mereka dapat membuka tautannya. Menghapus siswa atau mereset percobaan juga menghapus baris terkait dan memindahkan salinan foto ke Sampah Drive.
 
-Spreadsheet belum terhubung ke akun tertentu sampai pemilik membuat Spreadsheet, menetapkan `SPREADSHEET_ID` dan `SYNC_TOKEN` di Script Properties, lalu memasukkan URL deployment dan token yang sama pada environment server. Setelah memperbarui kode Apps Script, simpan dan deploy versi Web App yang baru. Jangan mengirim token melalui chat atau menyimpan nilainya di repository. Setelah deployment, uji dengan satu percobaan siswa dan pastikan tab **Hasil Asesmen** dan **Rekap Siswa** muncul sebelum digunakan untuk seluruh kelas.
+Spreadsheet belum terhubung ke akun tertentu sampai pemilik membuat Spreadsheet, menetapkan Script Properties, lalu memasukkan URL deployment dan token yang sama pada environment server. Setelah memperbarui kode Apps Script, simpan dan deploy versi Web App yang baru. Berikan otorisasi akses Google Drive dan UrlFetch saat diminta. Jangan mengirim token melalui chat atau menyimpan nilainya di repository. Setelah deployment dan environment Vercel diperbarui, uji dengan satu percobaan siswa dan pastikan tab **Profil Siswa**, **Hasil Asesmen**, **Rekap Siswa**, dan **Lampiran Foto** muncul sebelum digunakan untuk seluruh kelas.
 
 ## PhET
 
